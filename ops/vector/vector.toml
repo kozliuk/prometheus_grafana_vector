@@ -1,0 +1,62 @@
+[sources.app_docker]
+type = "docker_logs"
+include_containers = ["prometheus_grafana_vector_app_run"]
+
+[transforms.extract_message]
+type = "remap"
+inputs = ["app_docker"]
+source = """
+u_timestamp = to_int(to_timestamp!(.timestamp))
+. = parse_json!(.message)
+.timestamp = u_timestamp
+"""
+
+[transforms.filter_ProcessingStarted]
+type = "filter"
+inputs = ["extract_message"]
+condition = { type = "vrl", source = '.action == "STARTED_PROCESSING"' }
+
+
+[transforms.filter_ProcessingFinished]
+type = "filter"
+inputs = ["extract_message"]
+condition = { type = "vrl", source = '.action == "FINISHED_PROCESSING"' }
+
+
+[transforms.metric_ProcessingStarted]
+type = "log_to_metric"
+inputs = ["filter_ProcessingStarted"]
+
+  [[transforms.metric_ProcessingStarted.metrics]]
+  name = "x_processing_started"
+  type = "gauge"
+  field = "timestamp"
+
+  tags.file_name = "{{file_name}}"
+  tags.worker = "{{worker}}"
+
+
+[transforms.metric_ProcessingFinished]
+type = "log_to_metric"
+inputs = ["filter_ProcessingFinished"]
+
+  [[transforms.metric_ProcessingFinished.metrics]]
+  name = "x_processing_finished"
+  type = "gauge"
+  field = "timestamp"
+
+  tags.file_name = "{{file_name}}"
+  tags.worker = "{{worker}}"
+
+
+[sinks.test]
+inputs = ["metric_ProcessingStarted", "metric_ProcessingFinished"]
+type = "console"
+encoding = "json"
+
+
+[sinks.prometheus_exporter]
+inputs = ["metric_ProcessingStarted", "metric_ProcessingFinished"]
+buckets = [50,100,300,500,1000,2000,5000]
+type = "prometheus_exporter"
+address = "0.0.0.0:8383"

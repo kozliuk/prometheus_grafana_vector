@@ -1,0 +1,39 @@
+services:
+  prometheus:
+    image: prom/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yaml'
+      - "--log.level=debug"
+    ports:
+    - 9090:9090
+    volumes:
+    - ./ops/prometheus/:/etc/prometheus/
+    - ./ops/data/prometheus/:/prometheus
+
+  vector:
+    image: timberio/vector:0.20.0-debian
+    ports:
+    - 8383:8383
+    volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+    - ./ops/vector/vector.toml:/etc/vector/vector.toml
+
+  grafana:
+    image: grafana/grafana-enterprise
+    ports:
+    - 3000:3000
+    volumes:
+    - ./ops/grafana:/etc/grafana
+    - ./ops/data/grafana:/var/lib/grafana
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python app.py
+    volumes:
+    - ./app.py:/app/app.py
+    depends_on:
+      - vector
+      - prometheus
+      - grafana
